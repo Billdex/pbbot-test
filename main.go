@@ -15,6 +15,7 @@ func main() {
 
 	scheduler.Use(middleWare)
 	scheduler.Bind(handler, "keyword1", "keyword2")
+	scheduler.Group()
 
 	pbbot.HandleGroupMessage = func(bot *pbbot.Bot, event *onebot.GroupMessageEvent) {
 		err := scheduler.Process(bot, event)
