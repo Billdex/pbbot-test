@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/ProtobufBot/go-pbbot"
 	"github.com/ProtobufBot/go-pbbot/proto_gen/onebot"
+	"strings"
 )
 
 type Scheduler struct {
@@ -15,8 +16,10 @@ type HandleFunc func(*Context)
 func New() *Scheduler {
 	scheduler := &Scheduler{
 		CmdGroup: &CmdGroup{
-			Name:         []string{""},
-			Handlers:     []HandleFunc{},
+			isHandleNode: false,
+			ignoreCase:   false,
+			Keywords:     []string{""},
+			BaseHandlers: []HandleFunc{},
 			subCmdGroups: make([]*CmdGroup, 0),
 		},
 	}
@@ -26,38 +29,38 @@ func New() *Scheduler {
 
 func (s *Scheduler) createContext() *Context {
 	return &Context{
-		scheduler:   s,
-		handlers:    make([]HandleFunc, 0),
-		index:       0,
-		shouldReply: false,
+		scheduler: s,
+		handlers:  make([]HandleFunc, 0),
+		index:     0,
 	}
 }
 
 func (s *Scheduler) Process(bot *pbbot.Bot, event interface{}) error {
+	c := s.createContext()
 	var rawMessage string
 	if privateEvent, ok := event.(*onebot.PrivateMessageEvent); ok {
+		c.privateMessageEvent = privateEvent
 		rawMessage = privateEvent.RawMessage
 	} else if groupEvent, ok := event.(*onebot.GroupMessageEvent); ok {
+		c.groupMessageEvent = groupEvent
 		rawMessage = groupEvent.RawMessage
 	} else {
 		return errors.New("event类型错误!必须为*onebot.PrivateMessageEvent或*onebot.GroupMessageEvent")
 	}
-	c := s.createContext()
-	c.RawMessage = rawMessage
-	handlerChain, content := s.findHandler(rawMessage)
-	c.handlers = handlerChain
-	c.PretreatedMessage = content
-	for c.index < len(handlerChain) {
-		handlerChain[c.index](c)
+	c.bot = bot
+	c.rawMessage = rawMessage
+	handlerChain, content, found := s.findHandler(rawMessage)
+	if found {
+		c.handlers = handlerChain
+		c.PretreatedMessage = content
+		for c.index < len(c.handlers) {
+			c.handlers[c.index](c)
+			c.index++
+		}
 	}
-
-	if c.ShouldReply {
-
-	}
-
 	return nil
 }
 
-func (s *Scheduler) findHandler(message string) ([]HandleFunc, string) {
-	return s.CmdGroup.SearchHandlerChain(message)
+func (s *Scheduler) findHandler(message string) ([]HandleFunc, string, bool) {
+	return s.CmdGroup.SearchHandlerChain(strings.TrimSpace(message))
 }
